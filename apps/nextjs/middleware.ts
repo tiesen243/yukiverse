@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 import { middleware } from '@yuki/auth'
 
 const authRoutes: string[] = ['/login', '/register']
-const protectedRoutes: string[] = ['/protected']
+const protectedRoutes: string[] = []
 
 export default middleware(({ request, session }) => {
   const { pathname } = new URL(request.url)

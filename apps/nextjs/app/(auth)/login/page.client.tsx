@@ -17,13 +17,13 @@ import { Input } from '@yuki/ui/input'
 import { toast } from '@yuki/ui/sonner'
 import { signInSchema } from '@yuki/validators/auth'
 
-import { useTRPCClient } from '@/lib/trpc/react'
+import { useTRPC } from '@/lib/trpc/react'
 import { redirect } from '../_search-params'
 import { setSessionCookie } from './page.action'
 
 export const LoginForm: React.FC = () => {
   const [{ redirectTo }] = useQueryStates(redirect.parsers, redirect.configs)
-  const trpcClient = useTRPCClient()
+  const { trpcClient } = useTRPC()
   const { refresh } = useSession()
 
   const form = useForm({

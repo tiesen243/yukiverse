@@ -1,13 +1,10 @@
 'use client'
 
-import {
-  useMutation,
-  useQueryClient,
-  useSuspenseQuery,
-} from '@tanstack/react-query'
+import { useMutation, useSuspenseQuery } from '@tanstack/react-query'
+import { useSubscription } from '@trpc/tanstack-react-query'
 
-import type { RouterOutputs } from '@yuki/api'
-import { Button } from '@yuki/ui/button'
+import { RouterOutputs } from '@yuki/api'
+import { Button } from '@yuki/ui/components/button'
 import {
   Card,
   CardAction,
@@ -15,7 +12,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@yuki/ui/card'
+} from '@yuki/ui/components/card'
 import {
   Form,
   FormControl,
@@ -24,108 +21,65 @@ import {
   FormLabel,
   FormMessage,
   useForm,
-} from '@yuki/ui/form'
-import { TrashIcon } from '@yuki/ui/icons'
-import { Input } from '@yuki/ui/input'
-import { toast } from '@yuki/ui/sonner'
+} from '@yuki/ui/components/form'
+import { XIcon } from '@yuki/ui/components/icons'
+import { Input } from '@yuki/ui/components/input'
 import { createPostSchema } from '@yuki/validators/post'
 
-import { useTRPC, useTRPCClient } from '@/lib/trpc/react'
-
-export const CreatePost: React.FC = () => {
-  const trpc = useTRPC()
-  const trpcClient = useTRPCClient()
-  const queryClient = useQueryClient()
-
-  const form = useForm({
-    schema: createPostSchema,
-    defaultValues: { title: '', content: '' },
-    submitFn: trpcClient.post.create.mutate,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: trpc.post.all.queryKey(),
-      })
-      form.reset()
-    },
-    onError: (error) => {
-      toast.error(error)
-    },
-  })
-
-  return (
-    <Card>
-      <CardContent>
-        <Form form={form}>
-          <FormField
-            name="title"
-            render={(field) => (
-              <FormItem>
-                <FormLabel>Title</FormLabel>
-                <FormControl {...field}>
-                  <Input placeholder="What's on your mind?" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            name="content"
-            render={(field) => (
-              <FormItem>
-                <FormLabel>Content</FormLabel>
-                <FormControl {...field}>
-                  <Input placeholder="What's on your mind?" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <Button disabled={form.isPending}>Create Post</Button>
-        </Form>
-      </CardContent>
-    </Card>
-  )
-}
+import { useTRPC } from '@/lib/trpc/react'
 
 export const PostList: React.FC = () => {
-  const trpc = useTRPC()
+  const { trpc, queryClient } = useTRPC()
+
+  useSubscription(
+    trpc.post.onAdd.subscriptionOptions(undefined, {
+      onData: (data) => {
+        queryClient.setQueryData(trpc.post.all.queryKey(), (oldData) => {
+          if (!oldData) return [data]
+          return [data, ...oldData]
+        })
+      },
+    }),
+  )
+
+  useSubscription(
+    trpc.post.onDelete.subscriptionOptions(undefined, {
+      onData: (data) => {
+        queryClient.setQueryData(trpc.post.all.queryKey(), (oldData) => {
+          if (!oldData) return []
+          return oldData.filter((post) => post.id !== data.id)
+        })
+      },
+    }),
+  )
+
   const { data } = useSuspenseQuery(trpc.post.all.queryOptions())
+
   return data.map((post) => <PostCard key={post.id} post={post} />)
 }
 
 const PostCard: React.FC<{ post: RouterOutputs['post']['all'][number] }> = ({
   post,
 }) => {
-  const trpc = useTRPC()
-  const queryClient = useQueryClient()
-  const { mutate, isPending } = useMutation(
-    trpc.post.delete.mutationOptions({
-      onError: (error) => toast.error(error.message),
-      onSuccess: async () => {
-        await queryClient.invalidateQueries({
-          queryKey: trpc.post.all.queryKey(),
-        })
-      },
-    }),
-  )
+  const { trpc } = useTRPC()
+  const { mutate } = useMutation(trpc.post.delete.mutationOptions())
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>{post.title}</CardTitle>
-        <CardDescription>{post.createdAt.toDateString()}</CardDescription>
+        <CardDescription>
+          {post.author.name} - {post.createdAt.toDateString()}
+        </CardDescription>
         <CardAction>
           <Button
-            variant="ghost"
+            variant="outline"
             size="icon"
             onClick={() => {
               mutate({ id: post.id })
             }}
-            disabled={isPending}
           >
-            <TrashIcon />
+            <XIcon />
           </Button>
         </CardAction>
       </CardHeader>
@@ -140,16 +94,64 @@ const PostCard: React.FC<{ post: RouterOutputs['post']['all'][number] }> = ({
 export const PostCardSkeleton: React.FC = () => (
   <Card>
     <CardHeader>
-      <CardTitle className="w-1/3 animate-pulse rounded-lg bg-current">
+      <CardTitle className="w-full animate-pulse rounded-sm bg-current">
         &nbsp;
       </CardTitle>
-      <CardDescription className="w-1/4 animate-pulse rounded-lg bg-current">
+      <CardDescription className="w-1/2 animate-pulse rounded-sm bg-current">
         &nbsp;
       </CardDescription>
+      <CardAction>
+        <Button variant="outline" size="icon">
+          <XIcon />
+        </Button>
+      </CardAction>
     </CardHeader>
 
     <CardContent>
-      <p className="h-20 animate-pulse rounded-lg bg-current">&nbsp;</p>
+      <div className="h-20 w-full animate-pulse rounded-sm bg-current" />
     </CardContent>
   </Card>
 )
+
+export const CreatePostForm: React.FC = () => {
+  const { trpcClient } = useTRPC()
+  const form = useForm({
+    schema: createPostSchema,
+    defaultValues: { title: '', content: '' },
+    submitFn: trpcClient.post.add.mutate,
+    onSuccess: () => {
+      form.reset()
+    },
+  })
+
+  return (
+    <Form form={form}>
+      <FormField
+        name="title"
+        render={(field) => (
+          <FormItem>
+            <FormLabel>Title</FormLabel>
+            <FormControl {...field}>
+              <Input placeholder="Title" />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <FormField
+        name="content"
+        render={(field) => (
+          <FormItem>
+            <FormLabel>Content</FormLabel>
+            <FormControl {...field}>
+              <Input placeholder="Content" />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <Button disabled={form.isPending}>Create Post</Button>
+    </Form>
+  )
+}

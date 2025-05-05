@@ -2,9 +2,16 @@
 
 import type { QueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import * as React from 'react'
 import { QueryClientProvider } from '@tanstack/react-query'
-import { createTRPCClient, httpBatchStreamLink, loggerLink } from '@trpc/client'
-import { createTRPCContext } from '@trpc/tanstack-react-query'
+import {
+  createTRPCClient,
+  httpBatchStreamLink,
+  httpSubscriptionLink,
+  loggerLink,
+  splitLink,
+} from '@trpc/client'
+import { createTRPCOptionsProxy } from '@trpc/tanstack-react-query'
 import SuperJSON from 'superjson'
 
 import type { AppRouter } from '@yuki/api'
@@ -18,7 +25,20 @@ const getQueryClient = () => {
   else return (clientQueryClientSingleton ??= createQueryClient())
 }
 
-const { TRPCProvider, useTRPC, useTRPCClient } = createTRPCContext<AppRouter>()
+const TRPCContext = React.createContext<
+  | {
+      trpcClient: ReturnType<typeof createTRPCClient<AppRouter>>
+      trpc: ReturnType<typeof createTRPCOptionsProxy<AppRouter>>
+      queryClient: QueryClient
+    }
+  | undefined
+>(undefined)
+
+const useTRPC = () => {
+  const context = React.use(TRPCContext)
+  if (!context) throw new Error('useTRPC must be used within a TRPCProvider')
+  return context
+}
 
 const TRPCReactProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
@@ -34,26 +54,47 @@ const TRPCReactProvider: React.FC<{ children: React.ReactNode }> = ({
             process.env.NODE_ENV === 'development' ||
             (op.direction === 'down' && op.result instanceof Error),
         }),
-        httpBatchStreamLink({
-          transformer: SuperJSON,
-          url: getBaseUrl() + '/api/trpc',
-          headers() {
-            const headers = new Headers()
-            headers.set('x-trpc-source', 'react-nextjs')
-            return headers
-          },
+        splitLink({
+          condition: (op) => op.type === 'subscription',
+          false: httpBatchStreamLink({
+            transformer: SuperJSON,
+            url: getBaseUrl() + '/api/trpc',
+            headers() {
+              const headers = new Headers()
+              headers.set('x-trpc-source', 'react-nextjs')
+              return headers
+            },
+          }),
+          true: httpSubscriptionLink({
+            transformer: SuperJSON,
+            url: getBaseUrl() + '/api/trpc',
+            eventSourceOptions: () => ({
+              headers: { 'x-trpc-source': 'react-nextjs' },
+            }),
+          }),
         }),
       ],
     }),
   )
 
+  const [trpc] = useState(() =>
+    createTRPCOptionsProxy<AppRouter>({ client: trpcClient, queryClient }),
+  )
+
+  const contextValue = React.useMemo(
+    () => ({
+      trpcClient,
+      trpc,
+      queryClient,
+    }),
+    [trpcClient, trpc, queryClient],
+  )
+
   return (
     <QueryClientProvider client={queryClient}>
-      <TRPCProvider trpcClient={trpcClient} queryClient={queryClient}>
-        {children}
-      </TRPCProvider>
+      <TRPCContext value={contextValue}>{children}</TRPCContext>
     </QueryClientProvider>
   )
 }
 
-export { TRPCReactProvider, useTRPC, useTRPCClient }
+export { TRPCReactProvider, useTRPC }
