@@ -34,16 +34,22 @@ export const PostList: React.FC = () => {
 
   useSubscription(
     trpc.post.onAdd.subscriptionOptions(undefined, {
-      onData: () => {
-        void queryClient.invalidateQueries(trpc.post.all.queryFilter())
+      onData: (data) => {
+        queryClient.setQueryData(trpc.post.all.queryKey(), (oldData) => {
+          if (!oldData) return [data]
+          return [data, ...oldData]
+        })
       },
     }),
   )
 
   useSubscription(
     trpc.post.onDelete.subscriptionOptions(undefined, {
-      onData: () => {
-        void queryClient.invalidateQueries(trpc.post.all.queryFilter())
+      onData: (data) => {
+        queryClient.setQueryData(trpc.post.all.queryKey(), (oldData) => {
+          if (!oldData) return []
+          return oldData.filter((post) => post.id !== data.id)
+        })
       },
     }),
   )
