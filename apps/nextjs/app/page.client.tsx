@@ -32,7 +32,7 @@ import { useTRPC } from '@/lib/trpc/react'
 export const PostList: React.FC = () => {
   const { trpc, queryClient } = useTRPC()
 
-  useSubscription(
+  const { status: status1 } = useSubscription(
     trpc.post.onAdd.subscriptionOptions(undefined, {
       onData: (data) => {
         queryClient.setQueryData(trpc.post.all.queryKey(), (oldData) => {
@@ -40,10 +40,13 @@ export const PostList: React.FC = () => {
           return [data, ...oldData]
         })
       },
+      onError: (error) => {
+        toast.error(error.message)
+      },
     }),
   )
 
-  useSubscription(
+  const { status: status2 } = useSubscription(
     trpc.post.onDelete.subscriptionOptions(undefined, {
       onData: (data) => {
         queryClient.setQueryData(trpc.post.all.queryKey(), (oldData) => {
@@ -51,12 +54,27 @@ export const PostList: React.FC = () => {
           return oldData.filter((post) => post.id !== data.id)
         })
       },
+      onError: (error) => {
+        toast.error(error.message)
+      },
     }),
   )
 
   const { data } = useSuspenseQuery(trpc.post.all.queryOptions())
 
-  return data.map((post) => <PostCard key={post.id} post={post} />)
+  return (
+    <>
+      <div>
+        <div className="text-muted-foreground text-sm">
+          <p>Add event status: {status1}</p>
+          <p>Delete event status: {status2}</p>
+        </div>
+      </div>
+      {data.map((post) => (
+        <PostCard key={post.id} post={post} />
+      ))}
+    </>
+  )
 }
 
 const PostCard: React.FC<{ post: RouterOutputs['post']['all'][number] }> = ({
