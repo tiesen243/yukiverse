@@ -34,11 +34,8 @@ export const PostList: React.FC = () => {
 
   const { status: status1 } = useSubscription(
     trpc.post.onAdd.subscriptionOptions(undefined, {
-      onData: (data) => {
-        queryClient.setQueryData(trpc.post.all.queryKey(), (oldData) => {
-          if (!oldData) return [data]
-          return [data, ...oldData]
-        })
+      onData: () => {
+        void queryClient.refetchQueries(trpc.post.all.queryFilter())
       },
       onError: (error) => {
         toast.error(error.message)
@@ -48,11 +45,8 @@ export const PostList: React.FC = () => {
 
   const { status: status2 } = useSubscription(
     trpc.post.onDelete.subscriptionOptions(undefined, {
-      onData: (data) => {
-        queryClient.setQueryData(trpc.post.all.queryKey(), (oldData) => {
-          if (!oldData) return []
-          return oldData.filter((post) => post.id !== data.id)
-        })
+      onData: () => {
+        void queryClient.refetchQueries(trpc.post.all.queryFilter())
       },
       onError: (error) => {
         toast.error(error.message)
