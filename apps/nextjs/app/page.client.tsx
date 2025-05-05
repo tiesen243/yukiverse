@@ -3,7 +3,7 @@
 import { useMutation, useSuspenseQuery } from '@tanstack/react-query'
 import { useSubscription } from '@trpc/tanstack-react-query'
 
-import { RouterOutputs } from '@yuki/api'
+import type { RouterOutputs } from '@yuki/api'
 import { Button } from '@yuki/ui/components/button'
 import {
   Card,
@@ -22,8 +22,9 @@ import {
   FormMessage,
   useForm,
 } from '@yuki/ui/components/form'
-import { XIcon } from '@yuki/ui/components/icons'
+import { Loader2Icon, XIcon } from '@yuki/ui/components/icons'
 import { Input } from '@yuki/ui/components/input'
+import { toast } from '@yuki/ui/sonner'
 import { createPostSchema } from '@yuki/validators/post'
 
 import { useTRPC } from '@/lib/trpc/react'
@@ -62,7 +63,13 @@ const PostCard: React.FC<{ post: RouterOutputs['post']['all'][number] }> = ({
   post,
 }) => {
   const { trpc } = useTRPC()
-  const { mutate } = useMutation(trpc.post.delete.mutationOptions())
+  const { mutate, isPending } = useMutation(
+    trpc.post.delete.mutationOptions({
+      onError: (error) => {
+        toast.error(error.message)
+      },
+    }),
+  )
 
   return (
     <Card>
@@ -78,8 +85,9 @@ const PostCard: React.FC<{ post: RouterOutputs['post']['all'][number] }> = ({
             onClick={() => {
               mutate({ id: post.id })
             }}
+            disabled={isPending}
           >
-            <XIcon />
+            {isPending ? <Loader2Icon className="animate-spin" /> : <XIcon />}
           </Button>
         </CardAction>
       </CardHeader>
@@ -121,6 +129,9 @@ export const CreatePostForm: React.FC = () => {
     submitFn: trpcClient.post.add.mutate,
     onSuccess: () => {
       form.reset()
+    },
+    onError: (error) => {
+      toast.error(error)
     },
   })
 
